@@ -1,0 +1,26 @@
+sudo apt-get install libeigen3-dev
+
+# download glpk, navigate to its directory
+./configure
+make --jobs=4
+make check
+make install
+
+#make a more sensible location for libraries
+sudo ln -s /usr/local/lib/libglpk.so.40 /usr/lib/libglpk.so.40
+sudo ln -s /usr/local/lib/libglpk.so /usr/lib/libglpk.so
+sudo ln -s /usr/local/lib/libglpk.a /usr/lib/libglpk.a
+
+#back to main directory of CLQO
+
+#check that libraries are working:
+g++ -Wall glpk_test.c -lglpk -o glpk_test
+./glpk_test
+
+g++ -Wall eigen_test.c -I /usr/include/eigen3 -o eigen_test
+./eigen_test
+
+#build the main executable
+g++ -Wall clqo_main.c -std=c++0x -O2 -lglpk -I /usr/include/eigen3 -o clqo
+
+./clqo
