@@ -17,6 +17,7 @@
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using Eigen::Vector3d;
+using Eigen::Vector4d;
 
 typedef unsigned int uint32_t;
 typedef std::pair<int,int> clause;
@@ -26,10 +27,10 @@ typedef std::pair<clause,float> wclause;
 #define CONSTRAINT_FAIL_LIMIT 5
 
 void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::vector<float>& literalWeights){
-	variables = 12;
+	variables = 20;
 	literalWeights.resize(variables);
 	
-	literalWeights[0] += 0.1;
+	/*literalWeights[0] += 0.1;
 	literalWeights[1] += 0.53;
 	literalWeights[4] += 1.2;
 	literalWeights[6] -= 3.7;
@@ -60,7 +61,43 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 	clauses.push_back(std::pair<clause,float>(std::pair<int,int>(-11,6), 1.3));
 	clauses.push_back(std::pair<clause,float>(std::pair<int,int>(-5,11), 1.8));
 	clauses.push_back(std::pair<clause,float>(std::pair<int,int>(-12,4), 1.7));
-	clauses.push_back(std::pair<clause,float>(std::pair<int,int>(-5,12), 1.6));
+	clauses.push_back(std::pair<clause,float>(std::pair<int,int>(-5,12), 1.6));*/
+	
+	std::vector<int> realSol;
+	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+	std::uniform_int_distribution<int> truthGenerator(0,1);
+	std::uniform_int_distribution<int> variableChoser(1,variables);
+	std::cout << "True satisfaction: " << std::endl;
+	for(uint32_t i=0;i<variables;i++){
+		realSol.push_back(2*truthGenerator(generator) - 1);
+		std::cout << realSol[i] << ", ";
+	}
+	std::cout  << std::endl;
+	
+	uint32_t bothTrueClause = 1*variables;
+	uint32_t OneOneClause = 5*variables;
+	uint32_t bothFalseClause = 0;//1*variables - 5;
+	for(uint32_t i=0;i<bothTrueClause;i++){
+		int varA = variableChoser(generator), varB;
+		do varB = variableChoser(generator); while (varB == varA);
+		varA *= realSol[varA-1];
+		varB *= realSol[varB-1];
+		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
+	}
+	for(uint32_t i=0;i<OneOneClause;i++){
+		int varA = variableChoser(generator), varB;
+		do varB = variableChoser(generator); while (varB == varA);
+		varA *= realSol[varA-1];
+		varB *= -realSol[varB-1];
+		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
+	}
+	for(uint32_t i=0;i<bothFalseClause;i++){
+		int varA = variableChoser(generator), varB;
+		do varB = variableChoser(generator); while (varB == varA);
+		varA *= -realSol[varA-1];
+		varB *= -realSol[varB-1];
+		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
+	}
 }
 
 unsigned long isqrt(unsigned long x)
@@ -112,6 +149,18 @@ MatrixXd& getSubmatrix(std::vector<int> rows, std::vector<float> currSol){
 		
 		for(uint32_t j=i+1;j<rows.size();j++)
 			result(j,i) = result(i,j) = currSol[getLPVar(rows[i],rows[j])-1];
+	}
+	
+	return result;
+}
+
+MatrixXd& getMatrix(std::vector<float> currSol, uint32_t nQP){
+	MatrixXd& result = *new MatrixXd(nQP, nQP);
+	for(uint32_t i=0;i<nQP;i++){
+		result(i,i) = 1;
+		
+		for(uint32_t j=i+1;j<nQP;j++)
+			result(j,i) = result(i,j) = currSol[getLPVar(i,j)-1];
 	}
 	
 	return result;
@@ -211,27 +260,32 @@ std::vector<int>& nonPSDcore(uint32_t nQP, uint32_t nLP, std::vector<float> curr
 	return core;
 }
 
-void roundMat(glp_prob *lp, MatrixXd subMat, int nQP, int nLP){
-	std::cout << "The matrix A:" << std::endl << subMat << std::endl;
+void roundMat(glp_prob *lp, std::vector<float> currSol, MatrixXd& Amat, int nQP, int nLP, float constantTerm){
 	
 	//TODO call to an actual SDP solver
 	
+	MatrixXd& solMat = getMatrix(currSol, nQP);
+	
+	std::cout << "The matrix Sol:" << std::endl << solMat << std::endl;
+	
 	//for now --
 	//Reduce 'magnitude' slightly to make PSD
-	Eigen::SelfAdjointEigenSolver<MatrixXd> eig(subMat);
+	Eigen::SelfAdjointEigenSolver<MatrixXd> eig(solMat);
 	auto evals = eig.eigenvalues();
 	double minEigenvalue = evals[0] - 0.001;
 	
-	subMat *= -1. / (-1 + minEigenvalue);
-	subMat += MatrixXd::Identity(nQP, nQP) * (minEigenvalue / (-1 + minEigenvalue));
+	solMat *= -1. / (-1 + minEigenvalue);
+	solMat += MatrixXd::Identity(nQP, nQP) * (minEigenvalue / (-1 + minEigenvalue));
 	
-	std::cout << "SDP-ified A:" << std::endl;
+	std::cout << "SDP-ified Sol:" << std::endl;
 	
-	std::cout << subMat << std::endl;
-	Eigen::LLT<MatrixXd> lltOfA(subMat); // compute the Cholesky decomposition of A
+	std::cout << solMat << std::endl;
+	Eigen::LLT<MatrixXd> lltOfA(solMat); // compute the Cholesky decomposition of A
 	MatrixXd L = lltOfA.matrixL(); // retrieve factor L  in the decomposition
 	// The previous two lines can also be written as "L = A.llt().matrixL()"
 	std::cout << "The Cholesky factor L is" << std::endl << L << std::endl;
+	
+	delete &solMat;
 	
 	//generate random dot vector
 	VectorXd v(nQP);
@@ -248,6 +302,8 @@ void roundMat(glp_prob *lp, MatrixXd subMat, int nQP, int nLP){
 	for(int i=0;i<nQP;i++)
 		printf("%d, ", (int)std::copysign(1.0,resultVec(i)));
 	puts("");
+	
+	printf("Score = %f\n", resultVec.transpose() * Amat * resultVec + constantTerm);
 }
 
 //Returns a constraint that the submatrix violates, or 0-length
@@ -272,6 +328,38 @@ std::vector<double>& findConstraint(MatrixXd& subMat){
 		res[1] = bestVec(0)*bestVec(1);
 		res[2] = bestVec(0)*bestVec(2);
 		res[3] = bestVec(1)*bestVec(2);
+		res[0] = -1;
+		return res;
+	}
+	if(subMat.rows() == 4){
+		Vector4d bestVec; 
+		bestVec(0) = bestVec(1) = bestVec(2) = bestVec(3) = 1;
+		float bestDot = 2; //maximum 'useful' score of 1
+		for(int dir=0; dir<4; dir++){
+				for(int bits=0; bits<4; bits++){
+				Vector4d test;
+				test(0) = ((bits>>0) & 1)*2 - 1;
+				test(1) = ((bits>>1) & 1)*2 - 1;
+				test(2) = 1;
+				
+				float temp = test(dir);
+				test(dir) = 0;
+				test(3) = temp;
+				
+				float score = test.transpose() * subMat * test;
+				if(score < bestDot){
+					bestDot = score;
+					bestVec = test;
+				}
+			}
+		}
+		std::vector<double>& res = *new std::vector<double>(7);
+		res[1] = bestVec(1)*bestVec(0);
+		res[2] = bestVec(2)*bestVec(0);
+		res[3] = bestVec(2)*bestVec(1);
+		res[4] = bestVec(3)*bestVec(0);
+		res[5] = bestVec(3)*bestVec(1);
+		res[6] = bestVec(3)*bestVec(2);
 		res[0] = -1;
 		return res;
 	}
@@ -318,6 +406,7 @@ int main(void)
 	
 	//Upper diagonal form of the optimization matrix
 	MatrixXd Amat(nQP,nQP);
+	Amat.setZero();
 	float constantTerm = 0;
 	
 	satToQP(variables, clauses, literalWeights, nQP, Amat, constantTerm);
@@ -352,8 +441,10 @@ int main(void)
 solve:
 	/* solve problem */
 	int simplex_err = glp_simplex(lp, NULL);
-	printf("Error Code = %d\n", simplex_err);
-	printf("Simplex Optimality? %s\n", glp_get_status(lp) == GLP_OPT ? "Y" : "N");
+	if(simplex_err != 0)
+		printf("FAILED Error Code = %d\n", simplex_err);
+	if(glp_get_status(lp) != GLP_OPT)
+		printf("Simplex Optimality FAILED");
 	
 	for(uint32_t i=1;i<=nLP;i++){
 		currSol[i-1] = glp_get_col_prim(lp, i);
@@ -405,7 +496,7 @@ findcore:
 		
 	rounding:
 		puts("No more constraints detected. Rounding off.");
-		roundMat(lp, coreMat, nQP, nLP);
+		roundMat(lp, currSol, Amat, nQP, nLP, constantTerm);
 		goto cleanup;
 	}
 	
@@ -415,6 +506,17 @@ complete:
 		printf("%d, ", (int)lround(currSol[getLPVar(0,i)-1]));
 	}
 	printf("\n");
+	
+	{
+		float score = constantTerm;
+		printf("constant %f\n", constantTerm);
+		for(int i=0;i<nQP;i++){
+			for(int j=i+1;j<nQP;j++){
+				score += (i==0 ? 1 : currSol[getLPVar(0,i)-1]) * currSol[getLPVar(0,j)-1] * Amat(i,j);
+			}
+		}
+		printf("Score = %f\n", score);
+	}
 	
 	goto cleanup;
 	
