@@ -25,9 +25,10 @@ typedef std::pair<clause,float> wclause;
 
 #define PSD_EIGEN_TOL 0.00001
 #define CONSTRAINT_FAIL_LIMIT 5
+#define MAX_TRIES_ROUNDING 5
 
 void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::vector<float>& literalWeights){
-	variables = 20;
+	variables = 40;
 	literalWeights.resize(variables);
 	
 	/*literalWeights[0] += 0.1;
@@ -76,7 +77,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 	
 	uint32_t bothTrueClause = 1*variables;
 	uint32_t OneOneClause = 5*variables;
-	uint32_t bothFalseClause = 0;//1*variables - 5;
+	uint32_t bothFalseClause = 1*variables - 5;
 	for(uint32_t i=0;i<bothTrueClause;i++){
 		int varA = variableChoser(generator), varB;
 		do varB = variableChoser(generator); while (varB == varA);
@@ -287,29 +288,34 @@ void roundMat(glp_prob *lp, std::vector<float> currSol, MatrixXd& Amat, int nQP,
 	
 	delete &solMat;
 	
-	//generate random dot vector
-	VectorXd v(nQP);
-	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
-	std::normal_distribution<double> distribution(0.0,1.0);
-	for(int i=0;i<nQP;i++){
-		v(i) = distribution(generator);
-		if(i==0) v(i) = fabs(v(i)); //normalize solution to start with "1"
+	for(int tries=0; tries<MAX_TRIES_ROUNDING; tries++){
+		//generate random dot vector
+		VectorXd v(nQP);
+		std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+		std::normal_distribution<double> distribution(0.0,1.0);
+		for(int i=0;i<nQP;i++){
+			v(i) = distribution(generator);
+			if(i==0) v(i) = fabs(v(i)); //normalize solution to start with "1"
+		}
+		
+		VectorXd resultVec = L * v;
+		//std::cout << "Dot product vector" << resultVec.transpose() << std::endl;
+		for(int i=0;i<nQP;i++)
+			resultVec(i) = std::copysign(1.0,resultVec(i));
+		
+		/*std::cout << "Final assignment: " << std::endl;
+		for(int i=0;i<nQP;i++)
+			printf("%f, ", resultVec(i));
+		puts("");*/
+		
+		printf("Score = %f\n", resultVec.transpose() * Amat * resultVec + constantTerm);
 	}
-	
-	VectorXd resultVec = L * v;
-	std::cout << "Dot product vector" << resultVec << std::endl;
-	std::cout << "Final assignment: " << std::endl;
-	for(int i=0;i<nQP;i++)
-		printf("%d, ", (int)std::copysign(1.0,resultVec(i)));
-	puts("");
-	
-	printf("Score = %f\n", resultVec.transpose() * Amat * resultVec + constantTerm);
 }
 
 //Returns a constraint that the submatrix violates, or 0-length
 //if none is found.
 std::vector<double>& findConstraint(MatrixXd& subMat){
-	if(subMat.rows() == 3){
+	if(subMat.rows() == 1){
 		Vector3d bestVec; 
 		bestVec(0) = bestVec(1) = bestVec(2) = 1;
 		float bestDot = 2; //maximum 'useful' score of 1
@@ -331,7 +337,7 @@ std::vector<double>& findConstraint(MatrixXd& subMat){
 		res[0] = -1;
 		return res;
 	}
-	if(subMat.rows() == 4){
+	if(subMat.rows() == 1){
 		Vector4d bestVec; 
 		bestVec(0) = bestVec(1) = bestVec(2) = bestVec(3) = 1;
 		float bestDot = 2; //maximum 'useful' score of 1
@@ -361,6 +367,43 @@ std::vector<double>& findConstraint(MatrixXd& subMat){
 		res[5] = bestVec(3)*bestVec(1);
 		res[6] = bestVec(3)*bestVec(2);
 		res[0] = -1;
+		return res;
+	}
+	if(subMat.rows() == 1){
+		VectorXd bestVec(5); 
+		bestVec(0) = bestVec(1) = bestVec(2) = bestVec(3) = bestVec(4) = 1;
+		float bestDot = 100; //maximum 'useful' score of 2
+		for(int bits=0; bits<16; bits++){
+			VectorXd test(5);
+			test(0) = ((bits>>0) & 1)*2 - 1;
+			test(1) = ((bits>>1) & 1)*2 - 1;
+			test(2) = ((bits>>2) & 1)*2 - 1;
+			test(3) = ((bits>>3) & 1)*2 - 1;
+			test(4) = 1;
+			
+			float score = test.transpose() * subMat * test;
+			if(score < bestDot){
+				bestDot = score;
+				bestVec = test;
+			}
+		}
+		if(bestDot >= 2){
+			//TODO the lifted 3 constraint
+			return *new std::vector<double>;
+		}
+		
+		std::vector<double>& res = *new std::vector<double>(11);
+		res[1] = bestVec(1)*bestVec(0);
+		res[2] = bestVec(2)*bestVec(0);
+		res[3] = bestVec(2)*bestVec(1);
+		res[4] = bestVec(3)*bestVec(0);
+		res[5] = bestVec(3)*bestVec(1);
+		res[6] = bestVec(3)*bestVec(2);
+		res[7] = bestVec(4)*bestVec(0);
+		res[8] = bestVec(4)*bestVec(1);
+		res[9] = bestVec(4)*bestVec(2);
+		res[10] = bestVec(4)*bestVec(3);
+		res[0] = -2;
 		return res;
 	}
 	printf("Unhandled size %d, returning no constraint.\n", (int)subMat.rows());
