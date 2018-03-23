@@ -28,7 +28,7 @@ typedef std::pair<clause,float> wclause;
 #define MAX_TRIES_ROUNDING 5
 
 void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::vector<float>& literalWeights){
-	variables = 40;
+	variables = 4;
 	literalWeights.resize(variables);
 	
 	/*literalWeights[0] += 0.1;
@@ -65,7 +65,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 	clauses.push_back(std::pair<clause,float>(std::pair<int,int>(-5,12), 1.6));*/
 	
 	std::vector<int> realSol;
-	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count()*0+1234);
 	std::uniform_int_distribution<int> truthGenerator(0,1);
 	std::uniform_int_distribution<int> variableChoser(1,variables);
 	std::cout << "True satisfaction: " << std::endl;
@@ -77,7 +77,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 	
 	uint32_t bothTrueClause = 1*variables;
 	uint32_t OneOneClause = 5*variables;
-	uint32_t bothFalseClause = 1*variables - 5;
+	uint32_t bothFalseClause = 3; //1*variables - 5;
 	for(uint32_t i=0;i<bothTrueClause;i++){
 		int varA = variableChoser(generator), varB;
 		do varB = variableChoser(generator); while (varB == varA);
@@ -315,7 +315,7 @@ void roundMat(glp_prob *lp, std::vector<float> currSol, MatrixXd& Amat, int nQP,
 //Returns a constraint that the submatrix violates, or 0-length
 //if none is found.
 std::vector<double>& findConstraint(MatrixXd& subMat){
-	if(subMat.rows() == 1){
+	if(subMat.rows() == 3){
 		Vector3d bestVec; 
 		bestVec(0) = bestVec(1) = bestVec(2) = 1;
 		float bestDot = 2; //maximum 'useful' score of 1

@@ -5,6 +5,10 @@
 
 #define PSD_EIGEN_TOL 0.00001
 #define MAX_TRIES_ROUNDING 5
+#define CONSTRAINT_FAIL_LIMIT 5
+
+using Eigen::Vector3d;
+using Eigen::Vector4d;
 
 //Construct solver
 LPSolver::LPSolver(Problem* p) {
@@ -27,6 +31,8 @@ LPSolver::LPSolver(Problem* p) {
 	
 	//Create GLPK instance
 	lp = glp_create_prob();
+	//Allocate room for LP solution
+	currSol = std::vector<float>(nLP); 
 	
 	glp_set_prob_name(lp, "CLQO"); //Name the problem
 	glp_set_obj_dir(lp, GLP_MAX);  //We maximize
@@ -64,6 +70,8 @@ std::pair<uint32_t,uint32_t> LPSolver::getQPVars(uint32_t v){
 	
 	return std::pair<uint32_t,uint32_t>(x,y);
 }
+
+
 
 //Given an assignment, find a minimal (but non necess. minimum) set of
 //rows/columns that has a constraint that's it violating.
@@ -229,6 +237,191 @@ void LPSolver::roundToSol(){//TODO write the solution to the problem
 	}
 }
 
+//Returns a constraint that the submatrix violates, or 0-length
+//if none is found.
+std::vector<double>& LPSolver::findConstraint(MatrixXd& subMat){
+	if(subMat.rows() == 3){
+		Vector3d bestVec; 
+		bestVec(0) = bestVec(1) = bestVec(2) = 1;
+		float bestDot = 2; //maximum 'useful' score of 1
+		for(int bits=0; bits<4; bits++){
+			Vector3d test;
+			test(0) = ((bits>>0) & 1)*2 - 1;
+			test(1) = ((bits>>1) & 1)*2 - 1;
+			test(2) = 1;
+			float score = test.transpose() * subMat * test;
+			if(score < bestDot){
+				bestDot = score;
+				bestVec = test;
+			}
+		}
+		std::vector<double>& res = *new std::vector<double>(4);
+		res[1] = bestVec(0)*bestVec(1);
+		res[2] = bestVec(0)*bestVec(2);
+		res[3] = bestVec(1)*bestVec(2);
+		res[0] = -1;
+		return res;
+	}
+	if(subMat.rows() == 1){
+		Vector4d bestVec; 
+		bestVec(0) = bestVec(1) = bestVec(2) = bestVec(3) = 1;
+		float bestDot = 2; //maximum 'useful' score of 1
+		for(int dir=0; dir<4; dir++){
+				for(int bits=0; bits<4; bits++){
+				Vector4d test;
+				test(0) = ((bits>>0) & 1)*2 - 1;
+				test(1) = ((bits>>1) & 1)*2 - 1;
+				test(2) = 1;
+				
+				float temp = test(dir);
+				test(dir) = 0;
+				test(3) = temp;
+				
+				float score = test.transpose() * subMat * test;
+				if(score < bestDot){
+					bestDot = score;
+					bestVec = test;
+				}
+			}
+		}
+		std::vector<double>& res = *new std::vector<double>(7);
+		res[1] = bestVec(1)*bestVec(0);
+		res[2] = bestVec(2)*bestVec(0);
+		res[3] = bestVec(2)*bestVec(1);
+		res[4] = bestVec(3)*bestVec(0);
+		res[5] = bestVec(3)*bestVec(1);
+		res[6] = bestVec(3)*bestVec(2);
+		res[0] = -1;
+		return res;
+	}
+	if(subMat.rows() == 1){
+		VectorXd bestVec(5); 
+		bestVec(0) = bestVec(1) = bestVec(2) = bestVec(3) = bestVec(4) = 1;
+		float bestDot = 100; //maximum 'useful' score of 2
+		for(int bits=0; bits<16; bits++){
+			VectorXd test(5);
+			test(0) = ((bits>>0) & 1)*2 - 1;
+			test(1) = ((bits>>1) & 1)*2 - 1;
+			test(2) = ((bits>>2) & 1)*2 - 1;
+			test(3) = ((bits>>3) & 1)*2 - 1;
+			test(4) = 1;
+			
+			float score = test.transpose() * subMat * test;
+			if(score < bestDot){
+				bestDot = score;
+				bestVec = test;
+			}
+		}
+		if(bestDot >= 2){
+			//TODO the lifted 3 constraint
+			return *new std::vector<double>;
+		}
+		
+		std::vector<double>& res = *new std::vector<double>(11);
+		res[1] = bestVec(1)*bestVec(0);
+		res[2] = bestVec(2)*bestVec(0);
+		res[3] = bestVec(2)*bestVec(1);
+		res[4] = bestVec(3)*bestVec(0);
+		res[5] = bestVec(3)*bestVec(1);
+		res[6] = bestVec(3)*bestVec(2);
+		res[7] = bestVec(4)*bestVec(0);
+		res[8] = bestVec(4)*bestVec(1);
+		res[9] = bestVec(4)*bestVec(2);
+		res[10] = bestVec(4)*bestVec(3);
+		res[0] = -2;
+		return res;
+	}
+	printf("Unhandled size %d, returning no constraint.\n", (int)subMat.rows());
+	return *new std::vector<double>;
+}
+
 void LPSolver::solve(){
-	//TODO hoo-wee!
+	int succConstraintFail = 0;
+	
+solve:
+	/* solve problem */
+	int simplex_err = glp_simplex(lp, NULL);
+	if(simplex_err != 0) {
+		printf("FAILED Error Code = %d\n", simplex_err);
+		exit(1);
+	}
+	if(glp_get_status(lp) != GLP_OPT) {
+		printf("Simplex Optimality FAILED");
+		exit(2);
+	}
+	
+	for(uint32_t i=1;i<=nLP;i++){
+		currSol[i-1] = glp_get_col_prim(lp, i);
+		printf("%f%s", currSol[i-1], i==nLP ? "\n" : ", ");
+	}
+	
+findcore:
+	std::vector<uint32_t> core = nonPSDcore();
+	if(core.size() == 0){
+		std::cout << "Perfect core!";
+		goto complete;
+	} else {
+		//We have a core, identify a new constraint
+		MatrixXd coreMat = getSubmatrix(core);
+		std::vector<double>& constraint = findConstraint(coreMat);
+		if(constraint.size() == 0){
+			succConstraintFail++;
+			if(succConstraintFail == CONSTRAINT_FAIL_LIMIT)
+				goto rounding;
+			else
+				goto findcore;
+		} else {
+			succConstraintFail=0;
+			
+			puts("Applying constraint");
+			//apply the constraint
+			//constraint consists of linear terms on the
+			//(core.size() choose 2) variables, preceded by
+			//a constant term. The variables are in the submatrix,
+			//and they'll need to mapped back "up" to the full matrix:
+			//turn ij into i and j, and then map i and j to the larger matrix,
+			//and then map back down to ij.
+			glp_add_rows(lp, 1);
+			uint32_t rowNum = glp_get_num_rows(lp);
+			//build indices to pass to GLPK's sparse representation
+			uint32_t indices[constraint.size()]; //+1 for 1 indexing, -1 for ignoring constant
+			for(uint32_t v=0; v<constraint.size()-1; v++){
+				std::pair<uint32_t,uint32_t> ij = getQPVars(1+v);
+				uint32_t largeI = core[ij.first], largeJ = core[ij.second];
+				uint32_t largeIJ = getLPVar(largeI, largeJ);
+				indices[1+v] = largeIJ;
+			}
+			//printf("%d, %d, %d, %d, %d\n", constraint.size()-1, indices[0], indices[1], indices[2]);
+			glp_set_mat_row(lp, rowNum, constraint.size()-1, (const int*)indices, &(constraint[0]));
+			//sum[ coeff[i]*x[i] ] >= coeff[-1]
+			glp_set_row_bnds(lp, rowNum, GLP_LO, constraint[0], 0.0);
+			goto solve;
+		}
+		
+		
+	rounding:
+		puts("No more constraints detected. Rounding off.");
+		roundToSol();
+		return;
+	}
+	
+complete:
+	puts("Global optimum found! Solution:");
+	for(uint32_t i=1;i<nQP;i++){
+		bestSol(i-1) = lround(currSol[getLPVar(0,i)-1]);
+	}
+	bestSol(0) = 1; bestSol(1) = -1; bestSol(2) = -1; bestSol(3) = -1; bestSol(4) = 1;
+	std::cout << bestSol;
+	
+	{
+		float score = problem->score(bestSol);
+		printf("Score = %f\n", score);
+	}
+	
+	return;
+}
+
+LPSolver::~LPSolver(){
+	glp_delete_prob(lp);
+	glp_free_env();
 }

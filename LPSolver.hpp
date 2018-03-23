@@ -30,6 +30,8 @@ class LPSolver
 	
 	//Constructor: build solver for a given problem
 	LPSolver(Problem* p);
+	//Destructor: mostly for freeing GLPK
+	~LPSolver();
 	
 	//Try to find successively better solutions
 	//TODO: some kind of required bound on goodness?
@@ -68,9 +70,15 @@ class LPSolver
 	//for this purpose, must later be freed
 	MatrixXd& getSubmatrix(std::vector<uint32_t> rows);
 	
+	//Get the whole matrix for the solution. Equivalent to 
+	//getSubmatrix(range(0,nQP))
 	MatrixXd& getMatrix();
 	
+	//Given an LP solution stored in currSol, try rounding off
+	//to a QP assignment
 	void roundToSol();
+	
+	std::vector<double>& findConstraint(MatrixXd& subMat);
 };
 
 //TODO findConstraint, main solving loop

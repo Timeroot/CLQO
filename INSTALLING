@@ -14,13 +14,13 @@ sudo ln -s /usr/local/lib/libglpk.a /usr/lib/libglpk.a
 #back to main directory of CLQO
 
 #check that libraries are working:
-g++ -Wall glpk_test.c -lglpk -o glpk_test
-./glpk_test
+g++ -Wall glpk_test.c -lglpk -o bin/glpk_test
+bin/glpk_test
 
-g++ -Wall eigen_test.c -I /usr/include/eigen3 -o eigen_test
-./eigen_test
+g++ -Wall eigen_test.c -I /usr/include/eigen3 -o bin/eigen_test
+bin/eigen_test
 
 #build the main executable
-g++ -Wall clqo_main.c -std=c++0x -O2 -lglpk -I /usr/include/eigen3 -o clqo
+g++ -Wall *.cpp -std=c++0x -O2 -lglpk -I /usr/include/eigen3 -o bin/clqo
 
-./clqo
+bin/clqo

@@ -17,14 +17,15 @@ int main(){
 	
 	Problem* p = Problem::from2SAT(variables, clauses, literalWeights);
 	LPSolver solver = LPSolver(p);
+	solver.solve();
 }
 
 void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::vector<float>& literalWeights){
-	variables = 5;
+	variables = 4;
 	literalWeights.resize(variables);
 	
 	std::vector<int> realSol;
-	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count()*0+1234);
 	std::uniform_int_distribution<int> truthGenerator(0,1);
 	std::uniform_int_distribution<int> variableChoser(1,variables);
 	std::cout << "True satisfaction: " << std::endl;
@@ -36,12 +37,14 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 	
 	uint32_t bothTrueClause = 1*variables;
 	uint32_t OneOneClause = 5*variables;
-	uint32_t bothFalseClause = 1*variables - 5;
+	uint32_t bothFalseClause = (variables <= 5 ? variables - 1 : 1*variables - 5);
+	std::cout << "Should get at least " << (bothTrueClause + OneOneClause) << std::endl; 
 	for(uint32_t i=0;i<bothTrueClause;i++){
 		int varA = variableChoser(generator), varB;
 		do varB = variableChoser(generator); while (varB == varA);
 		varA *= realSol[varA-1];
 		varB *= realSol[varB-1];
+		std::cout << "Clause " << varA << ", " << varB << std::endl;
 		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
 	}
 	for(uint32_t i=0;i<OneOneClause;i++){
@@ -49,6 +52,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		do varB = variableChoser(generator); while (varB == varA);
 		varA *= realSol[varA-1];
 		varB *= -realSol[varB-1];
+		std::cout << "Clause " << varA << ", " << varB << std::endl;
 		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
 	}
 	for(uint32_t i=0;i<bothFalseClause;i++){
@@ -56,6 +60,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		do varB = variableChoser(generator); while (varB == varA);
 		varA *= -realSol[varA-1];
 		varB *= -realSol[varB-1];
+		std::cout << "Clause " << varA << ", " << varB << std::endl;
 		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
 	}
 }
