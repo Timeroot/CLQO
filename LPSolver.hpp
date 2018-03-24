@@ -4,6 +4,8 @@
 #include <glpk.h> //Linear programming toolkit
 #include <Eigen/Sparse>
 
+//#define USE_INTERIOR
+
 //Represents a constraint: (a*x[0] + b*x[1] + .. <= rightSide)
 typedef struct {
 	Eigen::SparseVector<float> coeffs;
@@ -47,6 +49,12 @@ class LPSolver
 	
 	//GLPK linear problem 
 	glp_prob *lp;
+	//Solution config
+#ifdef USE_INTERIOR
+	glp_iptcp parm;
+#else
+	glp_smcp parm;
+#endif
 	
 	//Clauses generated so far (and possibly later removed)
 	std::vector<constraint> active_clauses;
@@ -77,6 +85,8 @@ class LPSolver
 	//Given an LP solution stored in currSol, try rounding off
 	//to a QP assignment
 	void roundToSol();
+	
+	float scoreRelaxation();
 	
 	std::vector<double>& findConstraint(MatrixXd& subMat);
 };

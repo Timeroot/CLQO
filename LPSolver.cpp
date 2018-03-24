@@ -4,11 +4,22 @@
 #include <iostream>
 
 #define PSD_EIGEN_TOL 0.00001
-#define MAX_TRIES_ROUNDING 5
+#define MAX_TRIES_ROUNDING 20
 #define CONSTRAINT_FAIL_LIMIT 5
 
 using Eigen::Vector3d;
 using Eigen::Vector4d;
+
+#include <sys/time.h>
+typedef unsigned long long timestamp_t;
+
+static timestamp_t
+get_timestamp ()
+{
+  struct timeval now;
+  gettimeofday (&now, NULL);
+  return  now.tv_usec + (timestamp_t)now.tv_sec * 1000000;
+}
 
 //Construct solver
 LPSolver::LPSolver(Problem* p) {
@@ -31,6 +42,13 @@ LPSolver::LPSolver(Problem* p) {
 	
 	//Create GLPK instance
 	lp = glp_create_prob();
+#ifdef USE_INTERIOR
+	glp_init_iptcp(&parm);
+#else
+	glp_init_smcp(&parm);
+#endif
+	parm.msg_lev = GLP_MSG_ERR;
+	
 	//Allocate room for LP solution
 	currSol = std::vector<float>(nLP); 
 	
@@ -186,6 +204,15 @@ MatrixXd& LPSolver::getMatrix(){
 	return result;
 }
 
+float LPSolver::scoreRelaxation(){
+	float score = problem->constantTerm;
+	for(uint32_t i=0;i<nQP;i++){
+		for(uint32_t j=i+1;j<nQP;j++)
+			score += currSol[getLPVar(i,j)-1] * problem->coeffs(i,j);
+	}
+	return score;
+}
+
 void LPSolver::roundToSol(){//TODO write the solution to the problem
 	
 	//TODO call to an actual SDP solver
@@ -260,9 +287,10 @@ std::vector<double>& LPSolver::findConstraint(MatrixXd& subMat){
 		res[2] = bestVec(0)*bestVec(2);
 		res[3] = bestVec(1)*bestVec(2);
 		res[0] = -1;
+		std::cout << "Constraint HP3:3" << std::endl;
 		return res;
 	}
-	if(subMat.rows() == 1){
+	if(subMat.rows() == 4){
 		Vector4d bestVec; 
 		bestVec(0) = bestVec(1) = bestVec(2) = bestVec(3) = 1;
 		float bestDot = 2; //maximum 'useful' score of 1
@@ -272,9 +300,10 @@ std::vector<double>& LPSolver::findConstraint(MatrixXd& subMat){
 				test(0) = ((bits>>0) & 1)*2 - 1;
 				test(1) = ((bits>>1) & 1)*2 - 1;
 				test(2) = 1;
+				test(3) = 0;
 				
 				float temp = test(dir);
-				test(dir) = 0;
+				test(dir) = test(3);
 				test(3) = temp;
 				
 				float score = test.transpose() * subMat * test;
@@ -284,6 +313,7 @@ std::vector<double>& LPSolver::findConstraint(MatrixXd& subMat){
 				}
 			}
 		}
+		std::cout << " *** \n*   *\n" << bestVec << "\n *** \n" << bestDot << std::endl;
 		std::vector<double>& res = *new std::vector<double>(7);
 		res[1] = bestVec(1)*bestVec(0);
 		res[2] = bestVec(2)*bestVec(0);
@@ -292,9 +322,10 @@ std::vector<double>& LPSolver::findConstraint(MatrixXd& subMat){
 		res[5] = bestVec(3)*bestVec(1);
 		res[6] = bestVec(3)*bestVec(2);
 		res[0] = -1;
+		std::cout << "Constraint HP4:3" << std::endl;
 		return res;
 	}
-	if(subMat.rows() == 1){
+	if(subMat.rows() == -1){
 		VectorXd bestVec(5); 
 		bestVec(0) = bestVec(1) = bestVec(2) = bestVec(3) = bestVec(4) = 1;
 		float bestDot = 100; //maximum 'useful' score of 2
@@ -329,6 +360,7 @@ std::vector<double>& LPSolver::findConstraint(MatrixXd& subMat){
 		res[9] = bestVec(4)*bestVec(2);
 		res[10] = bestVec(4)*bestVec(3);
 		res[0] = -2;
+		std::cout << "Constraint HP5:5" << std::endl;
 		return res;
 	}
 	printf("Unhandled size %d, returning no constraint.\n", (int)subMat.rows());
@@ -338,24 +370,45 @@ std::vector<double>& LPSolver::findConstraint(MatrixXd& subMat){
 void LPSolver::solve(){
 	int succConstraintFail = 0;
 	
+	double coreFindTime = 0.0, coreFindTotal = 0.0, simplexTime = 0.0, simplexTotal = 0.0;
+	
 solve:
 	/* solve problem */
-	int simplex_err = glp_simplex(lp, NULL);
+	timestamp_t simplexTimeStart = get_timestamp();
+	int simplex_err = 
+#ifdef USE_INTERIOR
+	glp_interior(lp, &parm);
+#else
+	glp_simplex(lp, &parm);
+#endif
+	timestamp_t simplexTimeEnd = get_timestamp();
+	simplexTotal += simplexTime = (simplexTimeEnd - simplexTimeStart) / 1000000.0L;
 	if(simplex_err != 0) {
 		printf("FAILED Error Code = %d\n", simplex_err);
-		exit(1);
+		if(simplex_err == GLP_EINSTAB){
+			printf("'just' an interior point stability check failed; using last point.\n");
+		} else {
+			exit(1);
+		}
 	}
-	if(glp_get_status(lp) != GLP_OPT) {
+	/*if(glp_get_status(lp) != GLP_OPT) {
 		printf("Simplex Optimality FAILED");
 		exit(2);
-	}
+	}*/
 	
 	for(uint32_t i=1;i<=nLP;i++){
+	#ifdef USE_INTERIOR
+		currSol[i-1] = glp_ipt_col_prim(lp, i);//glp_get_col_prim(lp, i);
+	#else
 		currSol[i-1] = glp_get_col_prim(lp, i);
-		printf("%f%s", currSol[i-1], i==nLP ? "\n" : ", ");
+	#endif
+		//printf("%f%s", currSol[i-1], i==nLP ? "\n" : ", ");
 	}
+	upperBound = std::min(upperBound, scoreRelaxation());
+	printf("New bound: %f\n", upperBound);
 	
 findcore:
+	timestamp_t timeCoreStart = get_timestamp();
 	std::vector<uint32_t> core = nonPSDcore();
 	if(core.size() == 0){
 		std::cout << "Perfect core!";
@@ -364,6 +417,8 @@ findcore:
 		//We have a core, identify a new constraint
 		MatrixXd coreMat = getSubmatrix(core);
 		std::vector<double>& constraint = findConstraint(coreMat);
+		timestamp_t timeCoreEnd = get_timestamp();
+		coreFindTotal += coreFindTime = (timeCoreEnd - timeCoreStart) / 1000000.0L;
 		if(constraint.size() == 0){
 			succConstraintFail++;
 			if(succConstraintFail == CONSTRAINT_FAIL_LIMIT)
@@ -373,7 +428,6 @@ findcore:
 		} else {
 			succConstraintFail=0;
 			
-			puts("Applying constraint");
 			//apply the constraint
 			//constraint consists of linear terms on the
 			//(core.size() choose 2) variables, preceded by
@@ -383,14 +437,18 @@ findcore:
 			//and then map back down to ij.
 			glp_add_rows(lp, 1);
 			uint32_t rowNum = glp_get_num_rows(lp);
+			
+			printf("Applying constraint %d -- coreTime = %f, simplexTime = %f (this: %f, %f)\n", rowNum, coreFindTotal, simplexTotal, coreFindTime, simplexTime);
 			//build indices to pass to GLPK's sparse representation
-			uint32_t indices[constraint.size()]; //+1 for 1 indexing, -1 for ignoring constant
+			uint32_t indices[constraint.size()]; //size+1 for 1 indexing, (size+1)-1 for ignoring constant
 			for(uint32_t v=0; v<constraint.size()-1; v++){
 				std::pair<uint32_t,uint32_t> ij = getQPVars(1+v);
 				uint32_t largeI = core[ij.first], largeJ = core[ij.second];
+				printf(" (%d,%d)*%.1f",largeI,largeJ,constraint[1+v]);
 				uint32_t largeIJ = getLPVar(largeI, largeJ);
 				indices[1+v] = largeIJ;
 			}
+			printf(">=%.1f\n",constraint[0]);
 			//printf("%d, %d, %d, %d, %d\n", constraint.size()-1, indices[0], indices[1], indices[2]);
 			glp_set_mat_row(lp, rowNum, constraint.size()-1, (const int*)indices, &(constraint[0]));
 			//sum[ coeff[i]*x[i] ] >= coeff[-1]
@@ -407,10 +465,11 @@ findcore:
 	
 complete:
 	puts("Global optimum found! Solution:");
+	bestSol(0) = 1;
 	for(uint32_t i=1;i<nQP;i++){
-		bestSol(i-1) = lround(currSol[getLPVar(0,i)-1]);
+		bestSol(i) = lround(currSol[getLPVar(0,i)-1]);
 	}
-	bestSol(0) = 1; bestSol(1) = -1; bestSol(2) = -1; bestSol(3) = -1; bestSol(4) = 1;
+	//bestSol(0) = 1; bestSol(1) = -1; bestSol(2) = -1; bestSol(3) = -1; bestSol(4) = 1;
 	std::cout << bestSol;
 	
 	{
