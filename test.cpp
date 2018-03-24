@@ -21,11 +21,11 @@ int main(){
 }
 
 void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::vector<float>& literalWeights){
-	variables = 20;
+	variables = 48;
 	literalWeights.resize(variables);
 	
 	std::vector<int> realSol;
-	std::default_random_engine generator(1234+std::chrono::high_resolution_clock::now().time_since_epoch().count()*1);
+	std::default_random_engine generator(1234+std::chrono::high_resolution_clock::now().time_since_epoch().count()*0);
 	std::uniform_int_distribution<int> truthGenerator(0,1);
 	std::uniform_int_distribution<int> variableChoser(1,variables);
 	std::cout << "True satisfaction: " << std::endl;
@@ -45,7 +45,8 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varA *= realSol[varA-1];
 		varB *= realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
-		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
+		float weight = 1;//(variables+variableChoser(generator))*variableChoser(generator)*0.1;
+		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
 	}
 	for(uint32_t i=0;i<OneOneClause;i++){
 		int varA = variableChoser(generator), varB;
@@ -53,7 +54,8 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varA *= realSol[varA-1];
 		varB *= -realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
-		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
+		float weight = 1;//(variables+variableChoser(generator))*variableChoser(generator)*0.1;
+		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
 	}
 	for(uint32_t i=0;i<bothFalseClause;i++){
 		int varA = variableChoser(generator), varB;
@@ -61,6 +63,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varA *= -realSol[varA-1];
 		varB *= -realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
-		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), 1.));
+		float weight = 1;//(variables+variableChoser(generator))*variableChoser(generator)*0.1;
+		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
 	}
 }
