@@ -72,7 +72,7 @@ class LPSolver
 	std::pair<uint32_t,uint32_t> getQPVars(uint32_t v);
 	
 	//Find a minimal submatrix with at least one negative eigenvalue
-	std::vector<uint32_t>& nonPSDcore();
+	std::vector<uint32_t>& nonPSDcore(std::vector<uint32_t>& banned);
 	
 	//Given an LP solution vector, extract a submatrix. Allocates a new matrix
 	//for this purpose, must later be freed
@@ -88,6 +88,7 @@ class LPSolver
 	
 	float scoreRelaxation();
 	
+	//Defined in find_constraint.cpp
 	std::vector<double>& findConstraint(MatrixXd& subMat);
 };
 

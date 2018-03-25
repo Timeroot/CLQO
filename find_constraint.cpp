@@ -45,7 +45,7 @@ std::vector<double>& findConstraint_3(MatrixXd& subMat){
 	res[2] = bestVec(0)*bestVec(2);
 	res[3] = bestVec(1)*bestVec(2);
 	res[0] = -1;
-	std::cout << "Constraint HP3:3 ~ " << bestDot << std::endl;
+	//std::cout << "Constraint HP3:3 ~ " << bestDot << std::endl;
 	return res;
 }
 
@@ -80,7 +80,7 @@ std::vector<double>& findConstraint_4(MatrixXd& subMat){
 	res[5] = bestVec(3)*bestVec(1);
 	res[6] = bestVec(3)*bestVec(2);
 	res[0] = -1;
-	std::cout << "Constraint HP4:3 ~ " << bestDot << std::endl;
+	//std::cout << "Constraint HP4:3 ~ " << bestDot << std::endl;
 	return res;
 }
 
@@ -102,8 +102,11 @@ std::vector<double>& findConstraint_5(MatrixXd& subMat){
 			bestVec = test;
 		}
 	}
+	std::vector<double>& res = *new std::vector<double>(11);
+	
 	if(bestDot < 2){
-		std::cout << "Constraint HP5:5 ~ " << bestDot << std::endl;
+		//std::cout << "Constraint HP5:5 ~ " << bestDot << std::endl;
+		res[0] = -2;
 	} else {
 		//It's option two: the lifted 3 constraint
 		//In practice this seems to occur only _very_ rarely!!
@@ -136,10 +139,10 @@ std::vector<double>& findConstraint_5(MatrixXd& subMat){
 				}
 			}
 		}
-		std::cout << "Constraint HP5:3 ~ " << bestDot  << std::endl;
+		//std::cout << "Constraint HP5:3 ~ " << bestDot  << std::endl;
+		res[0] = -1;
 	}
 	
-	std::vector<double>& res = *new std::vector<double>(11);
 	res[1] = bestVec(1)*bestVec(0);
 	res[2] = bestVec(2)*bestVec(0);
 	res[3] = bestVec(2)*bestVec(1);
@@ -150,6 +153,5 @@ std::vector<double>& findConstraint_5(MatrixXd& subMat){
 	res[8] = bestVec(4)*bestVec(1);
 	res[9] = bestVec(4)*bestVec(2);
 	res[10] = bestVec(4)*bestVec(3);
-	res[0] = -2;
 	return res;
 }

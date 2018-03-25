@@ -2,12 +2,12 @@
 
 #include <chrono>
 #include <iostream>
+#include <algorithm>
 
 #include <sys/time.h>
 
 #define PSD_EIGEN_TOL 0.00001
 #define MAX_TRIES_ROUNDING 20
-#define CONSTRAINT_FAIL_LIMIT 5
 #define CONSTRAINT_REMOVAL_SLACK 0.99
 
 typedef unsigned long long timestamp_t;
@@ -94,8 +94,8 @@ std::pair<uint32_t,uint32_t> LPSolver::getQPVars(uint32_t v){
 //rows/columns that has a constraint that's it violating.
 //If it's actually positive semidefinite, and there are not constraints
 //that it's violating, return the empty list. (Congrats! This means you
-//found the global optimum!) 
-std::vector<uint32_t>& LPSolver::nonPSDcore(){
+//found the global optimum!) Will not use rows/cols from 'banned', sorted.
+std::vector<uint32_t>& LPSolver::nonPSDcore(std::vector<uint32_t>& banned){
 	//Two phases: one where we add rows hoping to make it not PSD,
 	//and then later we remove rows to make it minimal.
 	
@@ -104,6 +104,9 @@ std::vector<uint32_t>& LPSolver::nonPSDcore(){
 	//Rows we have not taken
 	std::vector<uint32_t> notInCore;
 	for(uint32_t i=0;i<nQP;i++) notInCore.push_back(i);
+	
+	//Remove 'banned'. Must be in order.
+	for(uint32_t i=banned.size();i-->0;) notInCore.erase(notInCore.begin()+banned[i]);
 	
 	//put the rows in a random order
 	std::random_shuffle(notInCore.begin(), notInCore.end());
@@ -256,9 +259,10 @@ void LPSolver::roundToSol(){//TODO write the solution to the problem
 
 void LPSolver::solve(){
 	int constraintsEver = 0;
-	int succConstraintFail = 0;
 	
 	double coreFindTime = 0.0, coreFindTotal = 0.0, simplexTime = 0.0, simplexTotal = 0.0;
+	
+	std::vector<uint32_t> core_banned = std::vector<uint32_t>();
 	
 solve:
 	/* solve problem */
@@ -296,38 +300,29 @@ solve:
 	upperBound = std::min(upperBound, scoreRelaxation());
 	printf("New bound: %f\n", upperBound);
 	
-findcore:
+	//Remove non-binding constraints. Could be readded later, but unlikely
+	uint32_t rowNum = glp_get_num_rows(lp);
+	for(int i=rowNum;i>0;i--){
+		double slack = glp_get_row_prim(lp,i)-glp_get_row_lb(lp,i);
+		if(slack > CONSTRAINT_REMOVAL_SLACK){
+			//printf("Deleting %d of %d, slack=%f\n", i, rowNum, slack);
+			glp_del_rows(lp, 1, (const int*)&((&i)[-1]));
+		}
+	}
+	
+	core_banned.clear();
+	bool constraintFound = false;
+	
 	timestamp_t timeCoreStart = get_timestamp();
-	std::vector<uint32_t> core = nonPSDcore();
-	if(core.size() == 0){
-		std::cout << "Perfect core!";
-		goto complete;
-	} else {
+findcore:
+	std::vector<uint32_t> core = nonPSDcore(core_banned);
+	
+	if(core.size() != 0){
 		//We have a core, identify a new constraint
 		MatrixXd coreMat = getSubmatrix(core);
 		std::vector<double>& constraint = findConstraint(coreMat);
-		timestamp_t timeCoreEnd = get_timestamp();
-		coreFindTotal += coreFindTime = (timeCoreEnd - timeCoreStart) / 1000000.0L;
-		if(constraint.size() == 0){
-			succConstraintFail++;
-			if(succConstraintFail == CONSTRAINT_FAIL_LIMIT)
-				goto rounding;
-			else
-				goto findcore;
-		} else {
-			succConstraintFail=0;
-			
-			//for(uint32_t i=1;i<=nLP;i++) printf("%f, ",glp_get_col_prim(lp, i)); printf("\n");
-			
-			//Remove non-binding constraints. Could return but unlikely
-			uint32_t rowNum = glp_get_num_rows(lp);
-			for(int i=rowNum;i>0;i--){
-				double slack = glp_get_row_prim(lp,i)-glp_get_row_lb(lp,i);
-				if(slack > CONSTRAINT_REMOVAL_SLACK){
-					printf("Deleting %d of %d, slack=%f\n", i, rowNum, slack);
-					glp_del_rows(lp, 1, (const int*)&((&i)[-1]));
-				}
-			}
+		
+		if(constraint.size() != 0){
 			
 			//apply the constraint
 			//constraint consists of linear terms on the
@@ -339,7 +334,9 @@ findcore:
 			glp_add_rows(lp, 1);
 			rowNum = glp_get_num_rows(lp);
 			
-			printf("Applying constraint %d (%d)-- coreTime = %f, simplexTime = %f (this: %f, %f)\n", rowNum, constraintsEver, coreFindTotal, simplexTotal, coreFindTime, simplexTime);
+			constraintsEver++;
+			constraintFound = true;
+			
 			//build indices to pass to GLPK's sparse representation
 			uint32_t indices[constraint.size()]; //size+1 for 1 indexing, (size+1)-1 for ignoring constant
 			for(uint32_t v=0; v<constraint.size()-1; v++){
@@ -348,35 +345,43 @@ findcore:
 				uint32_t largeIJ = getLPVar(largeI, largeJ);
 				indices[1+v] = largeIJ;
 			}
+			//sum[ coeff[i]*x[i] ] >= coeff[0]
 			glp_set_mat_row(lp, rowNum, constraint.size()-1, (const int*)indices, &(constraint[0]));
-			constraintsEver++;
-			//sum[ coeff[i]*x[i] ] >= coeff[-1]
 			glp_set_row_bnds(lp, rowNum, GLP_LO, constraint[0], 0.0);
-			goto solve;
+			delete &constraint;
+		} else {
+			//We couldn't find a constraint for our submatrix. Let it slide
 		}
 		
+		core_banned.push_back(core[0]);
+		//core_banned.push_back(core[1]);
+		//core_banned.push_back(core[2]);
+		std::sort(core_banned.begin(), core_banned.end());
+		goto findcore;
+	}
+	timestamp_t timeCoreEnd = get_timestamp();
+	coreFindTotal += coreFindTime = (timeCoreEnd - timeCoreStart) / 1000000.0L;
+	
+	printf("%d constraints (%d ever)-- coreTime = %f, simplexTime = %f (this %f)\n", rowNum, constraintsEver, coreFindTotal, simplexTotal, simplexTime);
+	
+	//We have at this point exhausted (enough) constraints to add.
+	if(core_banned.size() == 0){
+		std::cout << "Global optimum found! Solution:" << std::endl;
+		bestSol(0) = 1;
+		for(uint32_t i=1;i<nQP;i++){
+			bestSol(i) = lround(currSol[getLPVar(0,i)-1]);
+		}
+		std::cout << bestSol;
 		
-	rounding:
-		puts("No more constraints detected. Rounding off.");
-		roundToSol();
-		return;
-	}
-	
-complete:
-	puts("Global optimum found! Solution:");
-	bestSol(0) = 1;
-	for(uint32_t i=1;i<nQP;i++){
-		bestSol(i) = lround(currSol[getLPVar(0,i)-1]);
-	}
-	//bestSol(0) = 1; bestSol(1) = -1; bestSol(2) = -1; bestSol(3) = -1; bestSol(4) = 1;
-	std::cout << bestSol;
-	
-	{
 		float score = problem->score(bestSol);
 		printf("Score = %f\n", score);
+	} else if(!constraintFound){
+		std::cout << "Unable to identify new constraints. Rounding off." << std::endl;
+		roundToSol();
+		return;
+	} else {
+		goto solve;
 	}
-	
-	return;
 }
 
 LPSolver::~LPSolver(){
