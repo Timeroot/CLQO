@@ -38,6 +38,8 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 	uint32_t bothTrueClause = 1*variables;
 	uint32_t OneOneClause = 5*variables;
 	uint32_t bothFalseClause = (variables <= 5 ? variables - 1 : 1*variables - 5);
+	bool w1 = true;
+	
 	std::cout << "Should get at least " << (bothTrueClause + OneOneClause) << std::endl; 
 	for(uint32_t i=0;i<bothTrueClause;i++){
 		int varA = variableChoser(generator), varB;
@@ -45,7 +47,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varA *= realSol[varA-1];
 		varB *= realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
-		float weight = 1;//(variables+variableChoser(generator))*variableChoser(generator)*0.1;
+		float weight = w1 ? 1 (variables+variableChoser(generator))*variableChoser(generator)*0.1;
 		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
 	}
 	for(uint32_t i=0;i<OneOneClause;i++){
@@ -54,7 +56,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varA *= realSol[varA-1];
 		varB *= -realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
-		float weight = 1;//(variables+variableChoser(generator))*variableChoser(generator)*0.1;
+		float weight = w1 ? 1 (variables+variableChoser(generator))*variableChoser(generator)*0.1;
 		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
 	}
 	for(uint32_t i=0;i<bothFalseClause;i++){
@@ -63,7 +65,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varA *= -realSol[varA-1];
 		varB *= -realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
-		float weight = 1;//(variables+variableChoser(generator))*variableChoser(generator)*0.1;
+		float weight = w1 ? 1 (variables+variableChoser(generator))*variableChoser(generator)*0.1;
 		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
 	}
 }
