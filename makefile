@@ -4,7 +4,7 @@ RM=rm -f
 CPPFLAGS=-Wall -std=c++0x -O2 -I /usr/include/eigen3
 LDLIBS=-lglpk
 
-SRCS=LPSolver.cpp Problem.cpp 
+SRCS=LPSolver.cpp Problem.cpp find_constraint.cpp
 OBJS=$(patsubst %.cpp,bin/%.o,$(SRCS))
 
 all: bin/clqo
@@ -12,7 +12,7 @@ all: bin/clqo
 bin/clqo: bin/test.o lib
 	$(CXX) -o bin/clqo $(OBJS) test.o $(LDLIBS) 
 
-lib: bin/LPSolver.o bin/Problem.o
+lib: $(OBJS)
 
 bin/%.o: %.cpp
 	$(CXX) $(CPPFLAGS) -c $< -o $@ 
