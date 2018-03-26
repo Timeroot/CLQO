@@ -6,21 +6,22 @@
 #include <chrono>
 #include <cmath>
 
-void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::vector<float>& literalWeights);
+void setSampleProblem(uint32_t& variables, std::vector<clause3>& clause3s, std::vector<clause2>& clauses, std::vector<float>& literalWeights);
 
 int main(){
 	uint32_t variables;
 	 //Each term is <(v1,v2), weight>, representing v1 OR v2.
-	std::vector<wclause> clauses;
+	std::vector<clause3> clause3s;
+	std::vector<clause2> clause2s;
 	std::vector<float> literalWeights;
-	setSampleProblem(variables, clauses, literalWeights);
+	setSampleProblem(variables, clause3s, clause2s, literalWeights);
 	
-	Problem* p = Problem::from2SAT(variables, clauses, literalWeights);
+	Problem* p = Problem::from3SAT(variables, clause3s, clause2s, literalWeights);
 	LPSolver solver = LPSolver(p);
 	solver.solve();
 }
 
-void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::vector<float>& literalWeights){
+void setSampleProblem(uint32_t& variables, std::vector<clause3>& clause3s, std::vector<clause2>& clause2s, std::vector<float>& literalWeights){
 	variables = 48;
 	literalWeights.resize(variables);
 	
@@ -48,7 +49,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varB *= realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
 		float weight = w1 ? 1 : (variables+variableChoser(generator))*variableChoser(generator)*0.1;
-		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
+		clause2s.push_back({weight, varA, varB});
 	}
 	for(uint32_t i=0;i<OneOneClause;i++){
 		int varA = variableChoser(generator), varB;
@@ -57,7 +58,7 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varB *= -realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
 		float weight = w1 ? 1 : (variables+variableChoser(generator))*variableChoser(generator)*0.1;
-		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
+		clause2s.push_back({weight, varA, varB});
 	}
 	for(uint32_t i=0;i<bothFalseClause;i++){
 		int varA = variableChoser(generator), varB;
@@ -66,6 +67,10 @@ void setSampleProblem(uint32_t& variables, std::vector<wclause>& clauses, std::v
 		varB *= -realSol[varB-1];
 		//std::cout << "Clause " << varA << ", " << varB << std::endl;
 		float weight = w1 ? 1 : (variables+variableChoser(generator))*variableChoser(generator)*0.1;
-		clauses.push_back(std::pair<clause,float>(std::pair<int,int>(varA,varB), weight));
+		clause2s.push_back({weight, varA, varB});
 	}
+	
+	clause3s.push_back({1, 1, 2, 3});
+	clause3s.push_back({1.5, -1, -4, 3});
+	clause3s.push_back({1.6, -2, -3, 4});
 }

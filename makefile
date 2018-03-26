@@ -1,7 +1,7 @@
 CC=gcc
 CXX=g++
 RM=rm -f
-CPPFLAGS=-Wall -std=c++0x -O2 -I /usr/include/eigen3
+CPPFLAGS=-Wall -std=gnu++17 -O2 -isystem /usr/include/eigen3
 LDLIBS=-lglpk
 
 SRCS=LPSolver.cpp Problem.cpp find_constraint.cpp
@@ -10,7 +10,7 @@ OBJS=$(patsubst %.cpp,bin/%.o,$(SRCS))
 all: bin/clqo
 
 bin/clqo: bin/test.o lib
-	$(CXX) -o bin/clqo $(OBJS) test.o $(LDLIBS) 
+	$(CXX) -o bin/clqo $(OBJS) bin/test.o $(LDLIBS) 
 
 lib: $(OBJS)
 

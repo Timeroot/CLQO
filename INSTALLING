@@ -1,3 +1,4 @@
+#install eigen
 sudo apt-get install libeigen3-dev
 
 # download glpk, navigate to its directory
@@ -21,6 +22,8 @@ g++ -Wall eigen_test.c -I /usr/include/eigen3 -o bin/eigen_test
 bin/eigen_test
 
 #build the main executable
-g++ -Wall *.cpp -std=c++0x -O2 -lglpk -I /usr/include/eigen3 -o bin/clqo
+#minimum gcc version 6
+make all
 
+#run
 bin/clqo
