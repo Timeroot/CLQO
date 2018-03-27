@@ -9,7 +9,10 @@
 
 #define PSD_EIGEN_TOL 0.00001
 #define MAX_TRIES_ROUNDING 20
-#define CONSTRAINT_REMOVAL_SLACK 0.99
+static float CONSTRAINT_SLACK_MINIMUM = 0.91;
+static float constraint_removal_slack = CONSTRAINT_SLACK_MINIMUM;
+static float IMPROVEMENT_SLACK_TIGHTENING = 0.001;
+static float SLACK_TIGHTENING_INCREMENT = 0.1;
 
 typedef unsigned long long timestamp_t;
 
@@ -261,7 +264,7 @@ void LPSolver::roundToSol(){//TODO write the solution to the problem
 void LPSolver::solve(){
 	int constraintsEver = 0;
 	
-	double coreFindTime = 0.0, coreFindTotal = 0.0, simplexTime = 0.0, simplexTotal = 0.0;
+	double coreFindTime = 0.0, coreFindTotal = 0.0, simplexTime = 0.0, simplexTotal = 0.0, clearTime, clearTotal = 0.0;
 	
 	std::vector<uint32_t> core_banned = std::vector<uint32_t>();
 	
@@ -298,18 +301,29 @@ solve:
 		currSol[i-1] = glp_get_col_prim(lp, i);
 	#endif
 	}
-	upperBound = std::min(upperBound, scoreRelaxation());
-	printf("New bound: %f\n", upperBound);
+	float oldUpperBound = upperBound;
+	float newScore = scoreRelaxation();
+	upperBound = std::min(upperBound, newScore);
+	printf("Bound: %.6f -> %.6f\n", oldUpperBound, newScore);
 	
+	float improvement = oldUpperBound - upperBound;
+	if(improvement < IMPROVEMENT_SLACK_TIGHTENING)
+		constraint_removal_slack += SLACK_TIGHTENING_INCREMENT;
+	else
+		constraint_removal_slack = CONSTRAINT_SLACK_MINIMUM;
+	
+	timestamp_t clearStart = get_timestamp();
 	//Remove non-binding constraints. Could be readded later, but unlikely
 	uint32_t rowNum = glp_get_num_rows(lp);
 	for(int i=rowNum;i>0;i--){
 		double slack = glp_get_row_prim(lp,i)-glp_get_row_lb(lp,i);
-		if(slack > CONSTRAINT_REMOVAL_SLACK){
+		if(slack > constraint_removal_slack){
 			//printf("Deleting %d of %d, slack=%f\n", i, rowNum, slack);
 			glp_del_rows(lp, 1, (const int*)&((&i)[-1]));
 		}
 	}
+	timestamp_t clearEnd = get_timestamp();
+	clearTotal += clearTime = (clearEnd-clearStart) / 1000000.0L;
 	
 	core_banned.clear();
 	bool constraintFound = false;
@@ -363,7 +377,7 @@ findcore:
 	timestamp_t timeCoreEnd = get_timestamp();
 	coreFindTotal += coreFindTime = (timeCoreEnd - timeCoreStart) / 1000000.0L;
 	
-	printf("%d constraints (%d ever)-- coreTime = %f, simplexTime = %f (this %f)\n", rowNum, constraintsEver, coreFindTotal, simplexTotal, simplexTime);
+	printf("%d constraints (%d ever)-- core = %.3f, simp = %.3f (this %.3f), del = %.3f (this %.3f) slk= %.3f\n", rowNum, constraintsEver, coreFindTotal, simplexTotal, simplexTime, clearTotal, clearTime, constraint_removal_slack);
 	
 	//We have at this point exhausted (enough) constraints to add.
 	if(core_banned.size() == 0){

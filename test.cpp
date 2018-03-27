@@ -70,7 +70,7 @@ void setSampleProblem(uint32_t& variables, std::vector<clause3>& clause3s, std::
 		clause2s.push_back({weight, varA, varB});
 	}
 	
-	clause3s.push_back({1, 1, 2, 3});
+	/*clause3s.push_back({1, 1, 2, 3});
 	clause3s.push_back({1.5, -1, -4, 3});
-	clause3s.push_back({1.6, -2, -3, 4});
+	clause3s.push_back({1.6, -2, -3, 4});*/
 }
