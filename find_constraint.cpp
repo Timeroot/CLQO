@@ -120,7 +120,7 @@ std::vector<double>& findConstraint_5(MatrixXd& subMat){
 				
 				test(0) = ((bits>>0) & 1)*2 - 1;
 				test(1) = ((bits>>1) & 1)*2 - 1;
-				test(2) = ((bits>>2) & 1)*2 - 1;
+				test(2) = 1;
 				test(3) = 0;
 				test(4) = 0;
 				

@@ -7,12 +7,13 @@
 
 #include <sys/time.h>
 
-#define PSD_EIGEN_TOL 0.00001
+#define PSD_EIGEN_TOL 0.0001
 #define MAX_TRIES_ROUNDING 20
-static float CONSTRAINT_SLACK_MINIMUM = 0.91;
+
+static float CONSTRAINT_SLACK_MINIMUM = 0.99;
 static float constraint_removal_slack = CONSTRAINT_SLACK_MINIMUM;
 static float IMPROVEMENT_SLACK_TIGHTENING = 0.001;
-static float SLACK_TIGHTENING_INCREMENT = 0.1;
+static float SLACK_TIGHTENING_INCREMENT = 0.0;
 
 typedef unsigned long long timestamp_t;
 
@@ -49,6 +50,7 @@ LPSolver::LPSolver(Problem* p) {
 	glp_init_iptcp(&parm);
 #else
 	glp_init_smcp(&parm);
+	parm.meth = GLP_DUAL;
 #endif
 	parm.msg_lev = GLP_MSG_ERR;
 	
@@ -357,9 +359,11 @@ findcore:
 			for(uint32_t v=0; v<constraint.size()-1; v++){
 				std::pair<uint32_t,uint32_t> ij = getQPVars(1+v);
 				uint32_t largeI = core[ij.first], largeJ = core[ij.second];
+				//printf("(%d,%d)*%f + ",largeI,largeJ,constraint[v+1]);
 				uint32_t largeIJ = getLPVar(largeI, largeJ);
 				indices[1+v] = largeIJ;
 			}
+			//printf(" <= %f\n", constraint[0]); 
 			//sum[ coeff[i]*x[i] ] >= coeff[0]
 			glp_set_mat_row(lp, rowNum, constraint.size()-1, (const int*)indices, &(constraint[0]));
 			glp_set_row_bnds(lp, rowNum, GLP_LO, constraint[0], 0.0);
