@@ -236,6 +236,6 @@ std::vector<double>& findConstraint_6(MatrixXd& subMat){
 	res[12] = bestVec(5)*bestVec(1);
 	res[13] = bestVec(5)*bestVec(2);
 	res[14] = bestVec(5)*bestVec(3);
-	res[14] = bestVec(5)*bestVec(4);
+	res[15] = bestVec(5)*bestVec(4);
 	return res;
 }
