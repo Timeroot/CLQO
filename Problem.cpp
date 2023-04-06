@@ -34,6 +34,38 @@ Problem* Problem::from2SAT(uint32_t n, std::vector<clause2>& clauses, std::vecto
 	return res;
 }
 
+/* Thoughts on encoding logic gate constraints faster
+x = AND(y,z)
+
+x <= y
+x <= z
+3SAT: x|!y|!z
+
+Allowed space:
+x y z SCORE
+0 0 0 1
+0 0 1 1
+0 1 0 1
+0 1 1 0
+1 1 1 1
+
+Score func:
+1 + x + (y*z)
+
+In {-1,+1} version, each variable becomes (1+var)/2, so:
+
+Allowed space:
+x y z SCORE
+- - - 1
+- - + 1
+- + - 1
+- + + 0
++ + + 1
+
+Score func:
+(3/2)+(1/4) + x/2 + y/4 + z/4 + (y*z)/4
+*/
+
 Problem* Problem::from3SAT(uint32_t n, std::vector<clause3>& clause3s, std::vector<clause2>& clause2s, std::vector<float>& literalWeights){
 	uint32_t m = clause3s.size(); //number of 3-clauses -> auxiliary variables
 	
