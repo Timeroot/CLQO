@@ -50,7 +50,7 @@ x y z SCORE
 1 1 1 1
 
 Score func:
-1 + x + (y*z)
+1 + x - (y*z)
 
 In {-1,+1} version, each variable becomes (1+var)/2, so:
 
@@ -63,7 +63,18 @@ x y z SCORE
 + + + 1
 
 Score func:
-(3/2)+(1/4) + x/2 + y/4 + z/4 + (y*z)/4
+5/4 + x/2 - y/4 - z/4 - (y*z)/4
+
+But actually we have several options for how we want to score it, since we have 5 points to fix and 7 degrees of freedom. The following two expressions can be freely added or subtracted without affecting the true optimum:
+1 + x - z - xz
+1 + x - y - xy
+or their sum + difference might be more attractive,
+2 + 2x - y - z - xy - xz
+z - y + xz - xy
+If you wanted to minimize the L2 norm of the objective matrix (a reasonable goal, maybe), the optimum is to add -3/16 copies of (2x - y - z - xy - xz), so that the new objective is
+7/8 + x/8 - y/16 - z/16 + (x*y)*3/16 + (x*z)*3/16 - (y*z)/4
+If you wante the minimize the L1 norm of the objective, the optimum is -1/4, which gives a nice sparse objective:
+3/4 + (x*y)/4 + (x*z)/4 - (y*z)/4
 */
 
 Problem* Problem::from3SAT(uint32_t n, std::vector<clause3>& clause3s, std::vector<clause2>& clause2s, std::vector<float>& literalWeights){
